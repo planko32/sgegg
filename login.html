@@ -834,42 +834,38 @@
             return;
           }
 
-          
-        try {
-          // Local demo login using stored demoCurrentUser
-          var digits = phoneInput ? getPhoneDigits(phoneInput.value) : '';
-          var rawUser = null;
           try {
-            var existing = localStorage.getItem('demoCurrentUser');
-            if (existing) rawUser = JSON.parse(existing);
-          } catch (e2) {
-            rawUser = null;
-          }
-          if (!rawUser || !rawUser.phoneDigits || rawUser.phoneDigits !== digits) {
-            showToast("Account not found. Please sign up first.");
-            if (phoneInput) {
-              phoneInput.classList.add("input-error");
-              phoneInput.focus();
+          if (window.ExaAuth) {
+            var digits = phoneInput ? getPhoneDigits(phoneInput.value) : '';
+            var userObj = null;
+            if (ExaAuth.findUserByPhoneDigits) {
+              userObj = ExaAuth.findUserByPhoneDigits(digits);
             }
-            return;
-          }
-          rawUser.lastLoginAt = new Date().toISOString();
-          try {
-            localStorage.setItem('demoCurrentUser', JSON.stringify(rawUser));
-          } catch (e3) {}
-          if (window.DemoWallet && typeof window.DemoWallet.setUser === 'function') {
-            window.DemoWallet.setUser(rawUser);
+            if (!userObj) {
+              var uid = ExaAuth.generateUid ? ExaAuth.generateUid() : String(Date.now());
+              userObj = {
+                uid: uid,
+                phoneDigits: digits
+              };
+              if (ExaAuth.updateUser) {
+                ExaAuth.updateUser(userObj);
+              } else if (ExaAuth.setCurrentUser) {
+                ExaAuth.setCurrentUser(userObj);
+              }
+            } else if (ExaAuth.setCurrentUser) {
+              ExaAuth.setCurrentUser(userObj);
+            }
           }
         } catch (e) {
-          console && console.error && console.error('Local login error', e);
+          console && console.error && console.error('Auth login error', e);
         }
-
           window.location.href = 'my-assets.html';
         });
       }
     });
   </script>
-<script src="wallet.js"></script><script src="common-nav.js"></script>
+<script src="wallet.js"></script>
+<script src="auth.js"></script><script src="common-nav.js"></script>
 <div aria-hidden="true" class="area-modal">
 <div class="area-modal-mask"></div>
 <div class="area-modal-panel">

@@ -584,7 +584,7 @@
         <img alt="" class="stat-icon" src="images/user-2-NAAgvz2o.png"/>
         <div class="stat-title">USDT Balance</div>
       </div>
-      <div class="stat-value">0/3000</div>
+      <div class="stat-value">0/1000</div>
       <div class="stat-sub">USDT Balance needed to reach V3</div>
     </div>
     <div class="stat-card">
@@ -766,7 +766,7 @@
         <img alt="" class="stat-icon" src="images/user-2-NAAgvz2o.png"/>
         <div class="stat-title">USDT Balance</div>
       </div>
-      <div class="stat-value">0/30000</div>
+      <div class="stat-value">0/10000</div>
       <div class="stat-sub">USDT Balance needed to reach V5</div>
     </div>
     <div class="stat-card">
@@ -995,6 +995,135 @@
       document.addEventListener("DOMContentLoaded", applyVipInfo);
     } else {
       applyVipInfo();
+    }
+  })();
+</script>
+
+
+<script>
+  (function () {
+    function getDemoUserInfo() {
+      var balance = parseFloat(localStorage.getItem("demoBalance") || "0");
+      var effectiveUsers = parseInt(localStorage.getItem("demoEffectiveUsers") || "0", 10);
+
+      if (isNaN(balance)) balance = 0;
+      if (isNaN(effectiveUsers)) effectiveUsers = 0;
+
+      return {
+        balance: balance,
+        effectiveUsers: effectiveUsers
+      };
+    }
+
+    var rulesByLevel = {
+      V1: { minBalance: 50,   minUsersTotal: 0  },
+      V2: { minBalance: 500,  minUsersTotal: 5  },
+      V3: { minBalance: 3000, minUsersTotal: 10 },
+      V4: { minBalance: 10000,minUsersTotal: 30 },
+      V5: { minBalance: 30000,minUsersTotal: 50 },
+      V6: { minBalance: 100000,minUsersTotal: 75 }
+    };
+
+    var levelOrder = ["V0","V1","V2","V3","V4","V5","V6"];
+
+    function calculateCurrentLevel(balance, totalUsers) {
+      var current = "V0";
+
+      if (balance >= rulesByLevel.V1.minBalance && totalUsers >= rulesByLevel.V1.minUsersTotal) {
+        current = "V1";
+      }
+      if (balance >= rulesByLevel.V2.minBalance && totalUsers >= rulesByLevel.V2.minUsersTotal) {
+        current = "V2";
+      }
+      if (balance >= rulesByLevel.V3.minBalance && totalUsers >= rulesByLevel.V3.minUsersTotal) {
+        current = "V3";
+      }
+      return current;
+    }
+
+    function getNextLevel(current) {
+      if (current === "V0") return "V1";
+      if (current === "V1") return "V2";
+      if (current === "V2") return "V3";
+      return null;
+    }
+
+    function applyVipLogic() {
+      var user = getDemoUserInfo();
+      var balance = user.balance;
+      var totalEffectiveUsers = user.effectiveUsers;
+
+      var currentLevel = calculateCurrentLevel(balance, totalEffectiveUsers);
+      var nextLevel = getNextLevel(currentLevel);
+
+      var pillSpan = document.querySelector(".current-level-pill span");
+      if (pillSpan) {
+        pillSpan.textContent = "Current Member Level:" + currentLevel;
+      }
+
+      var nextLevelEl = document.querySelector(".next-level");
+      if (nextLevelEl) {
+        if (nextLevel) {
+          nextLevelEl.textContent = "Next Level:" + nextLevel;
+        } else {
+          nextLevelEl.textContent = "Max Level";
+        }
+      }
+
+      var sections = document.querySelectorAll(".vip-section");
+      sections.forEach(function (sec) {
+        var level = sec.getAttribute("data-level");
+        var rules = rulesByLevel[level];
+        if (!rules) return;
+
+        var statValues = sec.querySelectorAll(".stat-card .stat-value");
+        if (statValues.length >= 2) {
+          statValues[0].textContent = balance + "/" + rules.minBalance;
+
+          var prevIndex = levelOrder.indexOf(level) - 1;
+          var prevLevelName = prevIndex >= 1 ? levelOrder[prevIndex] : null;
+          var prevTotal = prevLevelName && rulesByLevel[prevLevelName]
+            ? rulesByLevel[prevLevelName].minUsersTotal
+            : 0;
+
+          var requiredIncrement = rules.minUsersTotal - prevTotal;
+          if (requiredIncrement < 0) requiredIncrement = 0;
+
+          var gainedForThisLevel = totalEffectiveUsers - prevTotal;
+          if (gainedForThisLevel < 0) gainedForThisLevel = 0;
+          if (gainedForThisLevel > requiredIncrement) gainedForThisLevel = requiredIncrement;
+
+          if (requiredIncrement === 0) {
+            // No requirement for this level (مثل V1)، اعرض فقط إجمالي عدد المستخدمين الفعّالين
+            statValues[1].textContent = totalEffectiveUsers + "/0";
+          } else {
+            // Display total effective users against this level's required count
+            statValues[1].textContent = totalEffectiveUsers + "/" + requiredIncrement;
+          }
+        }
+
+        var lockedLabel = sec.querySelector(".vip-locked");
+        if (lockedLabel) {
+          var achieved = false;
+          if (rules.minUsersTotal === 0) {
+            achieved = balance >= rules.minBalance;
+          } else {
+            achieved = balance >= rules.minBalance && totalEffectiveUsers >= rules.minUsersTotal;
+          }
+
+          if (achieved && (level === currentLevel || level === "V1" || level === "V2" || level === "V3")) {
+            lockedLabel.textContent = "Unlocked";
+          } else {
+            lockedLabel.textContent = "Locked at this Level";
+          }
+        }
+      });
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", applyVipLogic);
+    } else {
+      applyVipLogic();
     }
   })();
 </script>
