@@ -385,6 +385,54 @@
     .tab-item.active {
       color: #00d1ff;
     }
+  
+    .run-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+    }
+    .run-modal {
+      background-color: #101b20;
+      border-radius: 16px;
+      padding: 18px 20px;
+      max-width: 280px;
+      width: 80%;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.7);
+      text-align: center;
+    }
+    .run-modal-title {
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 8px;
+    }
+    .run-modal-text {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.75);
+      margin-bottom: 12px;
+    }
+    .run-modal-spinner {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 2px solid rgba(0, 209, 255, 0.25);
+      border-top-color: #00d1ff;
+      margin: 0 auto 4px;
+      animation: run-spin 0.8s linear infinite;
+    }
+    .run-modal-countdown {
+      font-size: 11px;
+      color: #00d1ff;
+    }
+    @keyframes run-spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
   </style>
 </head>
 <body>
@@ -571,7 +619,7 @@
 </div>
 <div class="gpu-row">
 <span class="gpu-label">Daily run times</span>
-<span class="gpu-value">0/4</span>
+<span class="gpu-value">0/5</span>
 </div>
 </div>
 <div class="gpu-col">
@@ -745,6 +793,16 @@
 </div>
 </div>
 </div>
+
+<div class="run-modal-backdrop" id="runModal">
+  <div class="run-modal">
+    <div class="run-modal-title">Running task…</div>
+    <div class="run-modal-text">Please wait while your AI power task is running.</div>
+    <div class="run-modal-spinner"></div>
+    <div class="run-modal-countdown" id="runModalCountdown">8s</div>
+  </div>
+</div>
+
 <div class="tabbar">
 <div class="tab-item">
 <div class="tab-icon-circle"></div>
@@ -770,7 +828,67 @@
 
 <script src="wallet.js"></script>
 <script>
+  
   (function() {
+    // --- Shared user info from demo storage ---
+    function getDemoUserInfo() {
+      var balance = parseFloat(localStorage.getItem("demoBalance") || "0");
+      var effectiveUsers = parseInt(localStorage.getItem("demoEffectiveUsers") || "0", 10);
+      if (isNaN(balance)) balance = 0;
+      if (isNaN(effectiveUsers)) effectiveUsers = 0;
+      return { balance: balance, effectiveUsers: effectiveUsers };
+    }
+
+    // --- Membership rules (same logic as Member page) ---
+    var levelRules = {
+      V1: { minBalance: 50,   minUsers: 0  },
+      V2: { minBalance: 500,  minUsers: 5  },
+      V3: { minBalance: 3000, minUsers: 10 },
+      V4: { minBalance: 10000, minUsers: 0 },
+      V5: { minBalance: 30000, minUsers: 0 },
+      V6: { minBalance: 100000, minUsers: 0 }
+    };
+
+    var levelOrderMap = { V0: 0, V1: 1, V2: 2, V3: 3, V4: 4, V5: 5, V6: 6 };
+
+    function calcMembershipLevel() {
+      var user = getDemoUserInfo();
+      var balance = user.balance;
+      var eff = user.effectiveUsers;
+      var current = "V0";
+
+      ["V1","V2","V3"].forEach(function(lvl) {
+        var r = levelRules[lvl];
+        if (balance >= r.minBalance && eff >= r.minUsers) {
+          current = lvl;
+        }
+      });
+      return current;
+    }
+
+    function calcTotalDailyProfit() {
+      var user = getDemoUserInfo();
+      return user.balance * 0.018; // 1.8% of current balance as total daily profit
+    }
+
+    function calcTotalAllowedRuns() {
+      var total = 0;
+      if (Array.isArray(gpuConfigs) && state && state.levels) {
+        gpuConfigs.forEach(function(cfg, idx) {
+          var st = state.levels[idx];
+          if (!st) return;
+          if (st.unlocked && (cfg.levelText === "V1" || cfg.levelText === "V2" || cfg.levelText === "V3")) {
+            total += cfg.maxRuns;
+          }
+        });
+      }
+      return total || 1;
+    }
+
+
+    // --- Daily reset helper ---
+    var todayStr = new Date().toISOString().slice(0, 10);
+
     var gpuCardEls = document.querySelectorAll(".gpu-card");
     if (!gpuCardEls.length) return;
 
@@ -788,6 +906,7 @@
     var gpuConfigs = [];
     var defaultState = {
       currentLevelIndex: -1,
+      lastRunDate: todayStr,
       levels: []
     };
 
@@ -844,6 +963,14 @@
         if (raw) {
           var parsed = JSON.parse(raw);
           if (parsed && Array.isArray(parsed.levels) && parsed.levels.length === defaultState.levels.length) {
+            // Handle daily reset
+            if (parsed.lastRunDate !== todayStr) {
+              parsed.levels.forEach(function(lvl) {
+                lvl.runsToday = 0;
+                lvl.todayProfit = 0;
+              });
+              parsed.lastRunDate = todayStr;
+            }
             return parsed;
           }
         }
@@ -852,6 +979,34 @@
     }
 
     var state = loadState();
+
+    // Determine membership-based access
+    var membershipLevel = calcMembershipLevel();
+    var membershipRank = levelOrderMap[membershipLevel] || 0;
+
+    // Update unlocks based on membership (V1–V3 only)
+    gpuConfigs.forEach(function(cfg, i) {
+      var lvlText = cfg.levelText;
+      var reqRank = levelOrderMap[lvlText] || 0;
+      var st = state.levels[i];
+      if (!st) return;
+      // Only levels up to V3 can ever be unlocked; V4+ stay cosmetic
+      if (reqRank > 3 || membershipRank === 0 || membershipRank < reqRank) {
+        st.unlocked = false;
+      } else {
+        st.unlocked = true;
+      }
+      state.levels[i] = st;
+    });
+
+    // Sync currentLevelIndex with membership
+    var currentIdx = -1;
+    gpuConfigs.forEach(function(cfg, i) {
+      if (cfg.levelText === membershipLevel) {
+        currentIdx = i;
+      }
+    });
+    state.currentLevelIndex = currentIdx;
 
     function saveState() {
       try {
@@ -863,20 +1018,16 @@
       state.currentLevelIndex = index;
       gpuConfigs.forEach(function(cfg, i) {
         var lockTextEl = cfg.cardEl.querySelector(".gpu-lock span:last-child");
-        if (i < index) {
-          cfg.cardEl.style.display = "none";
-        } else {
-          cfg.cardEl.style.display = "";
-        }
         if (!lockTextEl) return;
-        if (state.levels[i].unlocked && i === index) {
+        if (state.levels[i].unlocked) {
           lockTextEl.textContent = "Unlocked";
         } else {
           lockTextEl.textContent = "Not unlocked";
         }
       });
       if (levelTagEl) {
-        levelTagEl.textContent = "Level:" + (index >= 0 ? gpuConfigs[index].levelText : "V0");
+        var currentLabel = index >= 0 ? gpuConfigs[index].levelText : "V0";
+        levelTagEl.textContent = "Level:" + currentLabel;
       }
     }
 
@@ -932,22 +1083,24 @@
       btn.addEventListener("click", function() {
         var st = state.levels[i];
 
+        // Membership-locked levels cannot be manually unlocked
         if (!st.unlocked) {
-          if (state.currentLevelIndex >= 0 && i > state.currentLevelIndex + 1) {
-            alert("Please unlock the previous level first.");
-            return;
-          }
-          var confirmUnlock = confirm("Unlock " + cfg.levelText + " package? (Demo only)");
-          if (!confirmUnlock) return;
-
-          st.unlocked = true;
-          state.levels[i] = st;
-          setCurrentLevel(i);
-          saveState();
-          updateSummary();
-          setButtonText();
-          alert(cfg.levelText + " unlocked. Tap Run to start.");
+          alert("This computing power package is locked. Please upgrade your member level to use it.");
           return;
+        }
+
+        // 3-day no-recharge check (optional demo)
+        var lastRecharge = localStorage.getItem("demoLastRechargeAt");
+        if (lastRecharge) {
+          try {
+            var last = new Date(lastRecharge);
+            var now = new Date();
+            var diffDays = (now - last) / (1000 * 60 * 60 * 24);
+            if (diffDays > 3) {
+              alert("Your account has not been recharged for more than 3 days. Please recharge to continue running AI Power.");
+              return;
+            }
+          } catch (e) {}
         }
 
         if (st.runsToday >= cfg.maxRuns) {
@@ -959,21 +1112,33 @@
         btn.disabled = true;
         var originalText = "Run";
 
+        // Show modal
+        var modal = document.getElementById("runModal");
+        var countdownEl = document.getElementById("runModalCountdown");
+        if (modal && countdownEl) {
+          modal.style.display = "flex";
+          countdownEl.textContent = duration + "s";
+        }
+
         function tick() {
-          btn.textContent = "Running... " + duration + "s";
           duration--;
+          if (countdownEl) {
+            countdownEl.textContent = (duration >= 0 ? duration : 0) + "s";
+          }
           if (duration < 0) {
             clearInterval(timer);
             finishRun();
           }
         }
 
-        tick();
         var timer = setInterval(tick, 1000);
 
         function finishRun() {
           btn.disabled = false;
           btn.textContent = originalText;
+          if (modal) {
+            modal.style.display = "none";
+          }
           st.runsToday += 1;
 
           var rate = cfg.rateMin + Math.random() * (cfg.rateMax - cfg.rateMin);
@@ -985,7 +1150,6 @@
             window.DemoWallet.addIncome(1);
           }
 
-
           state.levels[i] = st;
           saveState();
           updateSummary();
@@ -993,9 +1157,7 @@
           alert(
             "Run completed. Profit +" +
               profit.toFixed(2) +
-              " USDT (rate approx " +
-              rate.toFixed(2) +
-              "%)"
+              " USDT"
           );
         }
       });
