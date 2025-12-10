@@ -278,11 +278,23 @@
       display: flex;
       align-items: center;
       padding: 0 10px;
+      position: relative;
+      overflow: hidden;
     }
 
     .filter-input .placeholder {
       font-size: 11px;
       color: var(--text-muted);
+    }
+
+    .filter-input input[type="date"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      border: none;
+      background: transparent;
+      color: transparent;
+      cursor: pointer;
     }
 
     .dropdown-row {
@@ -378,7 +390,7 @@
       <section class="summary-card">
         <div class="summary-box">
           <div class="summary-label">Team Size</div>
-          <div class="summary-value">0/1</div>
+          <div class="summary-value">0/0</div>
         </div>
         <div class="summary-box">
           <div class="summary-label">Today&apos;s Earnings/Total revenue</div>
@@ -391,7 +403,7 @@
       <section class="generation-card">
         <div class="generation-header">1Generation</div>
         <div class="generation-values">
-          <span>0/1</span>
+          <span>0/0</span>
           <span>0%</span>
           <span>0/0</span>
         </div>
@@ -477,6 +489,7 @@
     </main>
   </div>
 
+  
   <script>
     (function () {
       // Toggle collapse of filters + dropdowns
@@ -494,19 +507,124 @@
         });
       }
 
-      // Simple demo dropdown interaction (no backend)
-      dropdownRows.forEach(function (row) {
-        row.addEventListener('click', function () {
-          row.classList.toggle('is-open');
+      // Date inputs inside Start/End boxes
+      var filterInputs = document.querySelectorAll('.filter-row .filter-input');
+      if (filterInputs.length >= 2) {
+        ['start', 'end'].forEach(function (type, idx) {
+          var box = filterInputs[idx];
+          if (!box) return;
+          var span = box.querySelector('.placeholder');
+
+          // create hidden date input that covers box
+          var input = document.createElement('input');
+          input.type = 'date';
+          box.appendChild(input);
+
+          // sync display when user picks a date
+          input.addEventListener('change', function () {
+            if (!span) return;
+            if (input.value) {
+              span.textContent = input.value;
+            } else {
+              span.textContent = type === 'start' ? 'Start Time' : 'End Time';
+            }
+            document.dispatchEvent(new CustomEvent('myteam:filtersChanged'));
+          });
         });
-      });
+      }
+
+      // Dropdowns: first = levels filter, others visual only
+      if (dropdownRows.length) {
+        var levelRow = dropdownRows[0];
+        var levelOptions = ['All Levels', 'LV.1', 'LV.2', 'LV.3', 'LV.4', 'LV.5', 'LV.6'];
+
+        levelRow.addEventListener('click', function () {
+          var labelSpan = levelRow.querySelector('span:first-child');
+          if (!labelSpan) return;
+          var current = labelSpan.textContent.trim();
+          var idx = levelOptions.indexOf(current);
+          if (idx === -1) idx = 0;
+          var next = levelOptions[(idx + 1) % levelOptions.length];
+          labelSpan.textContent = next;
+          document.dispatchEvent(new CustomEvent('myteam:filtersChanged'));
+        });
+
+        // other dropdown rows visual toggle only
+        for (var i = 1; i < dropdownRows.length; i++) {
+          (function (row) {
+            row.addEventListener('click', function () {
+              row.classList.toggle('is-open');
+            });
+          })(dropdownRows[i]);
+        }
+      }
     })();
   </script>
 
+
   <script src="wallet.js"></script>
+  
   <script>
-    
     (function () {
+
+      function maskAccount(account) {
+        if (!account) return "-";
+        var str = String(account).trim();
+        var sign = "";
+        if (str.charAt(0) === "+") {
+          sign = "+";
+          str = str.slice(1);
+        }
+        var clean = str.replace(/\s+/g, "");
+        if (clean.length <= 6) {
+          return sign + clean;
+        }
+        var first = clean.slice(0, 3);
+        var last = clean.slice(-3);
+        return sign + first + "****" + last;
+      }
+
+      function parseDateSafe(text) {
+        if (!text) return null;
+        var t = text.trim();
+        if (!t || t === "Start Time" || t === "End Time") return null;
+        var d = new Date(t);
+        if (isNaN(d.getTime())) return null;
+        return d;
+      }
+
+      function getFilterValues() {
+        var filterRow = document.querySelector(".filter-row");
+        var startSpan = filterRow ? filterRow.querySelector(".filter-input:nth-child(1) .placeholder") : null;
+        var endSpan = filterRow ? filterRow.querySelector(".filter-input:nth-child(2) .placeholder") : null;
+
+        var startDate = startSpan ? parseDateSafe(startSpan.textContent) : null;
+        var endDate = endSpan ? parseDateSafe(endSpan.textContent) : null;
+
+        var endDateMax = null;
+        if (endDate) {
+          endDateMax = new Date(endDate.getTime());
+          endDateMax.setHours(23, 59, 59, 999);
+        }
+
+        var levelRows = document.querySelectorAll(".dropdown-row");
+        var levelLabel = levelRows.length ? levelRows[0].querySelector("span:first-child") : null;
+        var levelFilter = null;
+        if (levelLabel) {
+          var txt = levelLabel.textContent.trim();
+          if (/^LV\./i.test(txt)) {
+            var n = parseInt(txt.split(".")[1], 10);
+            if (!isNaN(n)) levelFilter = n;
+          }
+        }
+
+        return {
+          startDate: startDate,
+          endDateMax: endDateMax,
+          levelFilter: levelFilter
+        };
+      }
+
       function applyTeamInfo() {
         if (!window.DemoWallet || !window.DemoWallet.getTeamSummary) return;
         var summary = window.DemoWallet.getTeamSummary() || {};
@@ -532,21 +650,41 @@
             var spans = row.querySelectorAll("span");
             var genInfo = summary.generations[g] || { effective: 0, percent: 0, income: 0 };
             if (spans.length >= 3) {
-              var totalGen = genInfo.effective || 0;
-              spans[0].textContent = genInfo.effective + "/" + totalGen;
-              spans[1].textContent = (genInfo.percent || 0) + "%";
-              spans[2].textContent = (genInfo.income || 0) + "/0";
+              var totalGen = genInfo.total || genInfo.invited || genInfo.effective || 0;
+              spans[0].textContent = (genInfo.effective || 0) + "/" + totalGen;
+              spans[1].textContent = (genInfo.percent != null ? genInfo.percent : (g === 1 ? 20 : g === 2 ? 5 : 3)) + "%";
+              var todayGenIncome =
+                genInfo.todayIncome != null ? genInfo.todayIncome : (genInfo.incomeToday || 0);
+              var totalGenIncome =
+                genInfo.totalIncome != null ? genInfo.totalIncome : (genInfo.income || 0);
+              spans[2].textContent = todayGenIncome + "/" + totalGenIncome;
             }
           });
         }
 
+        var filters = getFilterValues();
         var tbody = document.querySelector(".team-table tbody");
         if (tbody) {
           while (tbody.firstChild) {
             tbody.removeChild(tbody.firstChild);
           }
           var list = summary.members || [];
-          if (!list.length) {
+
+          var filtered = list.filter(function (m) {
+            if (filters.levelFilter != null) {
+              var lvlNum = m.level != null ? parseInt(m.level, 10) : null;
+              if (lvlNum !== filters.levelFilter) return false;
+            }
+            if (filters.startDate || filters.endDateMax) {
+              var reg = m.registeredAt ? new Date(m.registeredAt) : null;
+              if (!reg || isNaN(reg.getTime())) return false;
+              if (filters.startDate && reg < filters.startDate) return false;
+              if (filters.endDateMax && reg > filters.endDateMax) return false;
+            }
+            return true;
+          });
+
+          if (!filtered.length) {
             var tr = document.createElement("tr");
             ["-", "-", "-", "-"].forEach(function (txt) {
               var td = document.createElement("td");
@@ -555,13 +693,13 @@
             });
             tbody.appendChild(tr);
           } else {
-            list.forEach(function (m) {
+            filtered.forEach(function (m) {
               var tr = document.createElement("tr");
               var account = m.account || "-";
               var userId = m.userId || "-";
               var level = m.level != null ? ("LV." + m.level) : "LV.1";
               var regTime = m.registeredAt || "-";
-              [account, userId, level, regTime].forEach(function (txt) {
+              [maskAccount(account), userId, level, regTime].forEach(function (txt) {
                 var td = document.createElement("td");
                 td.textContent = txt;
                 tr.appendChild(td);
@@ -573,12 +711,17 @@
       }
 
       if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", applyTeamInfo);
+        document.addEventListener("DOMContentLoaded", function () {
+          applyTeamInfo();
+          document.addEventListener("myteam:filtersChanged", applyTeamInfo);
+        });
       } else {
         applyTeamInfo();
+        document.addEventListener("myteam:filtersChanged", applyTeamInfo);
       }
     })();
-</script>
+  </script>
+
 
 </body>
 </html>
