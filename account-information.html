@@ -242,7 +242,6 @@
       }
     }
   </style>
-  <script src="wallet.js"></script>
 </head>
 <body>
   <div class="app">
@@ -283,7 +282,7 @@
 
         <!-- Card 2 -->
         <section class="card">
-          <div class="row">
+          <div class="row email-row">
             <div class="label">Email</div>
             <div class="value">
               <span class="value-link account-email-value">ieudhehehe@mozej.com</span>
@@ -312,128 +311,152 @@
 
   <div id="toast" class="toast-message"></div>
 
-  
   <script>
+    
+    // Load dynamic account data from demoCurrentUser + DemoWallet (if available)
     (function () {
-      function formatDate(iso) {
-        if (!iso) return "-";
-        var d = new Date(iso);
-        if (isNaN(d.getTime())) return "-";
-        function two(n) { return n < 10 ? "0" + n : "" + n; }
-        return d.getFullYear() + "-" +
-               two(d.getMonth() + 1) + "-" +
-               two(d.getDate()) + " " +
-               two(d.getHours()) + ":" +
-               two(d.getMinutes()) + ":" +
-               two(d.getSeconds());
+      function safeText(value, fallback) {
+        if (typeof value === "string" && value.trim && value.trim() !== "") return value;
+        return fallback;
       }
 
-      function maskPhone(areaCode, digits) {
-        if (!digits) return "-";
-        var clean = String(digits).replace(/\D/g, "");
-        if (clean.length <= 4) return (areaCode || "") + clean;
-        var head = clean.slice(0, 3);
-        var tail = clean.slice(-3);
-        return (areaCode || "") + head + "****" + tail;
-      }
-
-      function showToast(msg) {
-        var toast = document.querySelector(".toast");
-        if (!toast) return;
-        toast.textContent = msg;
-        toast.classList.add("show");
-        setTimeout(function () {
-          toast.classList.remove("show");
-        }, 1600);
-      }
-
-      function init() {
-        var rawUser = null;
+      function loadCurrentUser() {
+        var user = null;
         try {
-          var existing = localStorage.getItem("demoCurrentUser");
-          if (existing) rawUser = JSON.parse(existing);
+          var raw = localStorage.getItem("demoCurrentUser");
+          if (raw) {
+            user = JSON.parse(raw);
+          }
         } catch (e) {
-          rawUser = null;
+          user = null;
         }
-        if (!rawUser || typeof rawUser !== "object") rawUser = {};
-
-        if (!rawUser.id) {
-          var baseId = Date.now().toString().slice(-6);
-          var randId = Math.floor(Math.random() * 900) + 100;
-          rawUser.id = "U" + baseId + String(randId);
+        // Try load from DemoWallet if available
+        try {
+          if ((!user || !user.phoneDigits) && window.DemoWallet && typeof DemoWallet.getUser === "function") {
+            var wUser = DemoWallet.getUser();
+            if (wUser) user = wUser;
+          }
+        } catch (e) {}
+        if (!user || typeof user !== "object") {
+          user = {};
+        }
+        // Ensure we have an ID
+        if (!user.id) {
+          var base = Date.now().toString().slice(-6);
+          var rand = Math.floor(Math.random() * 900) + 100; // 3 digits
+          user.id = base + String(rand); // 9-digit style ID
           try {
-            localStorage.setItem("demoCurrentUser", JSON.stringify(rawUser));
-          } catch (e2) {}
+            localStorage.setItem("demoCurrentUser", JSON.stringify(user));
+          } catch (e) {}
+          if (window.DemoWallet && typeof DemoWallet.setUser === "function") {
+            try { DemoWallet.setUser(user); } catch (e) {}
+          }
         }
+        return user;
+      }
+
+      function formatDateTime(isoLike, fallback) {
+        if (!isoLike) return fallback;
+        try {
+          var d = new Date(isoLike);
+          if (isNaN(d.getTime())) return fallback;
+          var y = d.getFullYear();
+          var m = String(d.getMonth() + 1).padStart(2, "0");
+          var day = String(d.getDate()).padStart(2, "0");
+          var hh = String(d.getHours()).padStart(2, "0");
+          var mm = String(d.getMinutes()).padStart(2, "0");
+          var ss = String(d.getSeconds()).padStart(2, "0");
+          return y + "-" + m + "-" + day + " " + hh + ":" + mm + ":" + ss;
+        } catch (e) {
+          return fallback;
+        }
+      }
+
+      try {
+        var user = loadCurrentUser();
+
+        var defaultId = document.getElementById("user-id").textContent;
+        var defaultPhone = document.querySelector(".account-phone-value").textContent;
+        var defaultEmail = document.querySelector(".account-email-value").textContent;
+        var defaultRegTime = document.querySelector(".account-regtime-value").textContent;
+        var defaultRegMethod = document.querySelector(".account-regmethod-value").textContent;
+
+        var id = safeText(user.id, defaultId);
+        var phoneDigits = safeText(user.phoneDigits || user.phone, "");
+        var areaCode = safeText(user.areaCode || "+1", "");
+        var phoneCombined = phoneDigits ? (areaCode ? areaCode + " " + phoneDigits : phoneDigits) : defaultPhone;
+        var email = safeText(user.email, "");
+        var regTime = formatDateTime(user.createdAt, defaultRegTime);
+        var regMethod = safeText(user.regMethod || "Phone", defaultRegMethod);
 
         var idEl = document.getElementById("user-id");
-        var phoneEl = document.querySelector(".account-phone-value");
-        var emailRow = document.querySelector(".row-email");
-        var emailEl = document.querySelector(".account-email-value");
-        var regTimeEl = document.querySelector(".account-regtime-value");
-        var regMethodEl = document.querySelector(".account-regmethod-value");
+        var phoneEls = document.querySelectorAll(".account-phone-value");
+        var emailEls = document.querySelectorAll(".account-email-value");
+        var regTimeEls = document.querySelectorAll(".account-regtime-value");
+        var regMethodEls = document.querySelectorAll(".account-regmethod-value");
 
-        if (idEl) {
-          idEl.textContent = rawUser.id || "-";
-        }
+        if (idEl) idEl.textContent = id;
+        phoneEls.forEach(function (el) { el.textContent = phoneCombined; });
+        regTimeEls.forEach(function (el) { el.textContent = regTime; });
+        regMethodEls.forEach(function (el) { el.textContent = regMethod; });
 
-        var areaCode = rawUser.areaCode || "+1";
-        var digits = rawUser.phoneDigits || rawUser.phone || "";
-        if (phoneEl) {
-          phoneEl.textContent = maskPhone(areaCode, digits);
-        }
-
-        if (rawUser.email) {
-          if (emailEl) emailEl.textContent = rawUser.email;
+        // Email: show only if user actually has email
+        var emailRow = document.querySelector(".email-row");
+        if (email && email.trim() !== "") {
+          emailEls.forEach(function (el) { el.textContent = email; });
           if (emailRow) emailRow.style.display = "flex";
         } else {
           if (emailRow) emailRow.style.display = "none";
         }
+      } catch (err) {
+        // leave default placeholders
+      }
+    })();
+;
+;
 
-        if (regTimeEl) {
-          regTimeEl.textContent = formatDate(rawUser.createdAt);
-        }
-        if (regMethodEl) {
-          regMethodEl.textContent = "Phone";
-        }
+    // Copy ID with toast
+    (function () {
+      var copyBtn = document.getElementById('copy-id');
+      var idSpan = document.getElementById('user-id');
+      var toastEl = document.getElementById('toast');
 
-        var copyBtn = document.getElementById("copy-id");
-        if (copyBtn && idEl) {
-          copyBtn.addEventListener("click", function () {
-            var text = idEl.textContent || "";
-            if (!text) return;
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-              navigator.clipboard.writeText(text).then(function () {
-                showToast("ID copied");
-              }).catch(function () {
-                showToast("Unable to copy ID");
-              });
-            } else {
-              var tmp = document.createElement("textarea");
-              tmp.value = text;
-              tmp.style.position = "fixed";
-              tmp.style.opacity = "0";
-              document.body.appendChild(tmp);
-              tmp.select();
-              try {
-                document.execCommand("copy");
-                showToast("ID copied");
-              } catch (e3) {
-                showToast("Unable to copy ID");
-              }
-              document.body.removeChild(tmp);
-            }
-          });
-        }
+      function showToast(message) {
+        if (!toastEl) return;
+        toastEl.textContent = message;
+        toastEl.classList.add('toast-visible');
+        window.clearTimeout(showToast._timer);
+        showToast._timer = window.setTimeout(function () {
+          toastEl.classList.remove('toast-visible');
+        }, 1600);
       }
 
-      if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", init);
-      } else {
-        init();
+      if (copyBtn && idSpan && navigator.clipboard) {
+        copyBtn.addEventListener('click', function () {
+          var text = idSpan.textContent || '';
+          navigator.clipboard.writeText(text).then(function () {
+            showToast('ID copied');
+          }).catch(function () {
+            showToast('Unable to copy ID');
+          });
+        });
+      } else if (copyBtn && idSpan) {
+        copyBtn.addEventListener('click', function () {
+          var range = document.createRange();
+          range.selectNodeContents(idSpan);
+          var selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+          try {
+            var ok = document.execCommand('copy');
+            showToast(ok ? 'ID copied' : 'Unable to copy ID');
+          } catch (e) {
+            showToast('Unable to copy ID');
+          }
+          selection.removeAllRanges();
+        });
       }
     })();
   </script>
-
 </body>
 </html>
