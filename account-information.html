@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Account Information</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <style>
+    :root {
+      --page-bg: #0C0B10;
+      --card-bg: #17202D;
+      --card-inner-bg: #050812;
+      --text-primary: #ffffff;
+      --text-secondary: rgba(255, 255, 255, 0.55);
+      --accent: #00d1ff;
+      --border-subtle: #233246;
+      --row-divider: #151b26;
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--page-bg);
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    }
+
+    .app {
+      min-height: 100vh;
+      max-width: 480px;
+      margin: 0 auto;
+      background-color: var(--page-bg);
+    }
+
+    .app-header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      background: #000000;
+    }
+
+    .back-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      margin-right: 8px;
+      background: rgba(11, 12, 16, 0.95);
+    }
+
+    .back-arrow {
+      width: 10px;
+      height: 10px;
+      border-left: 2px solid #ffffff;
+      border-bottom: 2px solid #ffffff;
+      transform: rotate(45deg);
+    }
+
+    .app-header-title {
+      flex: 1;
+      text-align: center;
+      margin-right: 40px;
+      font-size: 15px;
+      font-weight: 500;
+    }
+
+    .app-main {
+      padding: 16px 12px 24px;
+    }
+
+    .content {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .card {
+      background-color: var(--card-bg);
+      border-radius: 16px;
+      padding: 10px 14px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+    }
+
+    .row + .row {
+      border-top: 1px solid var(--row-divider);
+    }
+
+    .label {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .value {
+      font-size: 13px;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .value-link {
+      font-size: 13px;
+      color: var(--text-primary);
+      border-bottom: 0.5px solid var(--text-primary);
+      padding-bottom: 1px;
+    }
+
+    .value-accent {
+      color: var(--accent);
+    }
+
+    .avatar-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      overflow: hidden;
+      border: 1px solid #333a4c;
+      background-color: var(--card-inner-bg);
+    }
+
+    .avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .chevron {
+      width: 6px;
+      height: 6px;
+      border-right: 1px solid var(--text-secondary);
+      border-bottom: 1px solid var(--text-secondary);
+      transform: rotate(-45deg);
+      margin-left: 2px;
+    }
+
+    .copy-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .copy-icon {
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+      border: 1px solid var(--text-secondary);
+      position: relative;
+      cursor: pointer;
+    }
+
+    .copy-icon::before,
+    .copy-icon::after {
+      content: "";
+      position: absolute;
+      border: 1px solid var(--text-secondary);
+      border-radius: 2px;
+    }
+
+    .copy-icon::before {
+      width: 8px;
+      height: 6px;
+      left: 3px;
+      top: 3px;
+      border-top: 1px solid transparent;
+      border-left: 1px solid transparent;
+    }
+
+    .copy-icon::after {
+      width: 8px;
+      height: 6px;
+      left: 1px;
+      top: 1px;
+      border-bottom: 1px solid transparent;
+      border-right: 1px solid transparent;
+    }
+
+    .toast-message {
+      position: fixed;
+      left: 50%;
+      top: 110px;
+      transform: translate(-50%, -10px);
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.82);
+      color: #ffffff;
+      font-size: 12px;
+      line-height: 1.4;
+      max-width: 80%;
+      text-align: center;
+      z-index: 200;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.18s ease-out, transform 0.18s ease-out;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+    }
+
+    .toast-message.toast-visible {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+
+    @media (min-width: 481px) {
+      body {
+        display: flex;
+        justify-content: center;
+        background-color: #000;
+      }
+      .app {
+        margin-top: 12px;
+        border-radius: 20px;
+        border: 1px solid #171924;
+        overflow: hidden;
+      }
+    }
+  </style>
+  <script src="wallet.js"></script>
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <a href="javascript:history.back()" class="back-btn">
+        <div class="back-arrow"></div>
+      </a>
+      <div class="app-header-title">Account Information</div>
+    </header>
+
+    <main class="app-main">
+      <section class="content">
+        <!-- Card 1 -->
+        <section class="card">
+          <div class="row">
+            <div class="label">Profile Picture</div>
+            <div class="avatar-wrapper">
+              <div class="avatar">
+                <img src="images/account-avatar.png" alt="Avatar" />
+              </div>
+              <div class="chevron"></div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="label">ID</div>
+            <div class="value copy-wrapper">
+              <span id="user-id">90440407</span>
+              <div class="copy-icon" id="copy-id"></div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="label">Phone</div>
+            <div class="value">
+              <span class="value-link account-phone-value">70758137</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Card 2 -->
+        <section class="card">
+          <div class="row">
+            <div class="label">Email</div>
+            <div class="value">
+              <span class="value-link account-email-value">ieudhehehe@mozej.com</span>
+            </div>
+          </div>
+          <div class="row">
+            <div class="label">Registration Time</div>
+            <div class="value">
+              <span class="account-regtime-value">2025-11-29 16:44:43</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Card 3 -->
+        <section class="card">
+          <div class="row">
+            <div class="label">Registration Method</div>
+            <div class="value">
+              <span class="account-regmethod-value">Phone</span>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast-message"></div>
+
+  
+  <script>
+    (function () {
+      function formatDate(iso) {
+        if (!iso) return "-";
+        var d = new Date(iso);
+        if (isNaN(d.getTime())) return "-";
+        function two(n) { return n < 10 ? "0" + n : "" + n; }
+        return d.getFullYear() + "-" +
+               two(d.getMonth() + 1) + "-" +
+               two(d.getDate()) + " " +
+               two(d.getHours()) + ":" +
+               two(d.getMinutes()) + ":" +
+               two(d.getSeconds());
+      }
+
+      function maskPhone(areaCode, digits) {
+        if (!digits) return "-";
+        var clean = String(digits).replace(/\D/g, "");
+        if (clean.length <= 4) return (areaCode || "") + clean;
+        var head = clean.slice(0, 3);
+        var tail = clean.slice(-3);
+        return (areaCode || "") + head + "****" + tail;
+      }
+
+      function showToast(msg) {
+        var toast = document.querySelector(".toast");
+        if (!toast) return;
+        toast.textContent = msg;
+        toast.classList.add("show");
+        setTimeout(function () {
+          toast.classList.remove("show");
+        }, 1600);
+      }
+
+      function init() {
+        var rawUser = null;
+        try {
+          var existing = localStorage.getItem("demoCurrentUser");
+          if (existing) rawUser = JSON.parse(existing);
+        } catch (e) {
+          rawUser = null;
+        }
+        if (!rawUser || typeof rawUser !== "object") rawUser = {};
+
+        if (!rawUser.id) {
+          var baseId = Date.now().toString().slice(-6);
+          var randId = Math.floor(Math.random() * 900) + 100;
+          rawUser.id = "U" + baseId + String(randId);
+          try {
+            localStorage.setItem("demoCurrentUser", JSON.stringify(rawUser));
+          } catch (e2) {}
+        }
+
+        var idEl = document.getElementById("user-id");
+        var phoneEl = document.querySelector(".account-phone-value");
+        var emailRow = document.querySelector(".row-email");
+        var emailEl = document.querySelector(".account-email-value");
+        var regTimeEl = document.querySelector(".account-regtime-value");
+        var regMethodEl = document.querySelector(".account-regmethod-value");
+
+        if (idEl) {
+          idEl.textContent = rawUser.id || "-";
+        }
+
+        var areaCode = rawUser.areaCode || "+1";
+        var digits = rawUser.phoneDigits || rawUser.phone || "";
+        if (phoneEl) {
+          phoneEl.textContent = maskPhone(areaCode, digits);
+        }
+
+        if (rawUser.email) {
+          if (emailEl) emailEl.textContent = rawUser.email;
+          if (emailRow) emailRow.style.display = "flex";
+        } else {
+          if (emailRow) emailRow.style.display = "none";
+        }
+
+        if (regTimeEl) {
+          regTimeEl.textContent = formatDate(rawUser.createdAt);
+        }
+        if (regMethodEl) {
+          regMethodEl.textContent = "Phone";
+        }
+
+        var copyBtn = document.getElementById("copy-id");
+        if (copyBtn && idEl) {
+          copyBtn.addEventListener("click", function () {
+            var text = idEl.textContent || "";
+            if (!text) return;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(text).then(function () {
+                showToast("ID copied");
+              }).catch(function () {
+                showToast("Unable to copy ID");
+              });
+            } else {
+              var tmp = document.createElement("textarea");
+              tmp.value = text;
+              tmp.style.position = "fixed";
+              tmp.style.opacity = "0";
+              document.body.appendChild(tmp);
+              tmp.select();
+              try {
+                document.execCommand("copy");
+                showToast("ID copied");
+              } catch (e3) {
+                showToast("Unable to copy ID");
+              }
+              document.body.removeChild(tmp);
+            }
+          });
+        }
+      }
+
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", init);
+      } else {
+        init();
+      }
+    })();
+  </script>
+
+</body>
+</html>
