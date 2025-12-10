@@ -952,28 +952,47 @@
             console && console.warn && console.warn('Wallet signup bonus error', e);
           }
 
+          
+        // Local demo signup: store basic user info in localStorage + DemoWallet
+        try {
+          var digits = phoneInput ? getPhoneDigits(phoneInput.value) : '';
+          var nowIsoStr = new Date().toISOString();
+          var rawUser = null;
           try {
-          if (window.ExaAuth) {
-            var digits = phoneInput ? getPhoneDigits(phoneInput.value) : '';
-            var uid = ExaAuth.generateUid ? ExaAuth.generateUid() : String(Date.now());
-            var userObj = {
-              uid: uid,
-              phoneDigits: digits
-            };
-            if (ExaAuth.updateUser) {
-              ExaAuth.updateUser(userObj);
-            } else if (ExaAuth.setCurrentUser) {
-              ExaAuth.setCurrentUser(userObj);
-            }
+            var existing = localStorage.getItem('demoCurrentUser');
+            if (existing) rawUser = JSON.parse(existing);
+          } catch (e2) {
+            rawUser = null;
+          }
+          if (!rawUser || typeof rawUser !== 'object') rawUser = {};
+
+          if (!rawUser.id) {
+            var baseId = Date.now().toString().slice(-6);
+            var randId = Math.floor(Math.random() * 900) + 100;
+            rawUser.id = 'U' + baseId + String(randId);
+          }
+
+          rawUser.phoneDigits = digits;
+          // area code + invitation code can be extended later if needed
+          if (!rawUser.createdAt) rawUser.createdAt = nowIsoStr;
+          rawUser.lastLoginAt = nowIsoStr;
+
+          try {
+            localStorage.setItem('demoCurrentUser', JSON.stringify(rawUser));
+          } catch (e3) {}
+
+          if (window.DemoWallet && typeof window.DemoWallet.setUser === 'function') {
+            window.DemoWallet.setUser(rawUser);
           }
         } catch (e) {
-          console && console.error && console.error('Auth signup error', e);
+          console && console.error && console.error('Auth signup local error', e);
         }
+
           window.location.href = "my-assets.html";
         });
       }
     });
   </script>
-<script src="auth.js"></script><script src="common-nav.js"></script>
+<script src="common-nav.js"></script>
 </body>
 </html>
